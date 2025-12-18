@@ -10,26 +10,64 @@ import { ENV } from "./lib/env.js";
 import { app, server } from "./lib/socket.js";
 
 const __dirname = path.resolve();
-
 const PORT = ENV.PORT || 3000;
 
-app.use(express.json({ limit: "5mb" })); // req.body
-app.use(cors({ origin: ENV.CLIENT_URL, credentials: true }));
+/* =========================
+   GLOBAL MIDDLEWARE
+========================= */
+
+// Parse JSON body
+app.use(express.json({ limit: "5mb" }));
+
+// ✅ CORS — FIXED FOR VERCEL + LOCAL
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // allow Postman / server-to-server
+      if (!origin) return callback(null, true);
+
+      const allowedOrigins = [
+        "http://localhost:5173",        // local dev
+        ENV.CLIENT_URL,                // Vercel frontend
+      ];
+
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        console.error("❌ Blocked by CORS:", origin);
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
+
+// ✅ REQUIRED for preflight requests
+app.options("*", cors());
+
+// Cookies
 app.use(cookieParser());
+
+/* =========================
+   API ROUTES
+========================= */
 
 app.use("/api/auth", authRoutes);
 app.use("/api/messages", messageRoutes);
 
-// make ready for deployment
-if (ENV.NODE_ENV === "production") {
-  app.use(express.static(path.join(__dirname, "../frontend/dist")));
+/* =========================
+   HEALTH CHECK (OPTIONAL)
+========================= */
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "Backend running 🚀" });
+});
 
-  app.get("*", (_, res) => {
-    res.sendFile(path.join(__dirname, "../frontend", "dist", "index.html"));
-  });
-}
-
-server.listen(PORT, () => {
-  console.log("Server running on port: " + PORT);
-  connectDB();
+/* =========================
+   START SERVER
+========================= */
+server.listen(PORT, async () => {
+  console.log(`✅ Server running on port ${PORT}`);
+  await connectDB();
 });
