@@ -1,6 +1,5 @@
 import express from "express";
 import cookieParser from "cookie-parser";
-import path from "path";
 import cors from "cors";
 
 import authRoutes from "./routes/auth.route.js";
@@ -9,64 +8,56 @@ import { connectDB } from "./lib/db.js";
 import { ENV } from "./lib/env.js";
 import { app, server } from "./lib/socket.js";
 
-const __dirname = path.resolve();
 const PORT = ENV.PORT || 3000;
 
 /* =========================
    GLOBAL MIDDLEWARE
 ========================= */
 
-// Parse JSON body
 app.use(express.json({ limit: "5mb" }));
+app.use(cookieParser());
 
-// ✅ CORS — FIXED FOR VERCEL + LOCAL
+// ✅ CORS — FINAL FIX (Render ↔ Vercel ↔ Local)
 app.use(
   cors({
     origin: (origin, callback) => {
-      // allow Postman / server-to-server
-      if (!origin) return callback(null, true);
+      if (!origin) return callback(null, true); // Postman / server calls
 
       const allowedOrigins = [
-        "http://localhost:5173",        // local dev
-        ENV.CLIENT_URL,                // Vercel frontend
+        "http://localhost:5173",     // local frontend
+        ENV.CLIENT_URL,              // vercel frontend
       ];
 
       if (allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        console.error("❌ Blocked by CORS:", origin);
-        callback(new Error("Not allowed by CORS"));
+        return callback(null, true);
       }
+
+      console.error("❌ CORS blocked:", origin);
+      return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
-// ✅ REQUIRED for preflight requests
+// ✅ VERY IMPORTANT: preflight
 app.options("*", cors());
 
-// Cookies
-app.use(cookieParser());
-
 /* =========================
-   API ROUTES
+   ROUTES
 ========================= */
 
 app.use("/api/auth", authRoutes);
 app.use("/api/messages", messageRoutes);
 
-/* =========================
-   HEALTH CHECK (OPTIONAL)
-========================= */
-app.get("/health", (req, res) => {
-  res.status(200).json({ status: "Backend running 🚀" });
+// Health check (Render)
+app.get("/", (req, res) => {
+  res.send("Backend running ✅");
 });
 
 /* =========================
    START SERVER
 ========================= */
+
 server.listen(PORT, async () => {
   console.log(`✅ Server running on port ${PORT}`);
   await connectDB();
